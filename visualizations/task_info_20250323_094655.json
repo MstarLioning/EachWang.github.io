@@ -1,0 +1,46 @@
+{
+  "task_description": "pick up the red cube",
+  "timestamp": "20250323_094655",
+  "raw_action": {
+    "world_vector": [
+      -0.0468372692343067,
+      -0.06125894570263003,
+      -0.11776282524010716
+    ],
+    "rotation_delta": [
+      0.07075764051196615,
+      0.08175998873102869,
+      -0.03238454891244602
+    ],
+    "open_gripper": [
+      0.996078431372549
+    ]
+  },
+  "processed_action": {
+    "world_vector": [
+      -0.0468372692343067,
+      -0.06125894570263003,
+      -0.11776282524010716
+    ],
+    "rot_axangle": [
+      0.07203592044872704,
+      0.08057426131826119,
+      -0.03524559159504278
+    ],
+    "gripper": [
+      -0.996078431372549
+    ],
+    "terminate_episode": [
+      0.0
+    ]
+  },
+  "attention_captures": {
+    "last_featurizer_attn": {
+      "captured": false,
+      "message": "\u521b\u5efa\u4e86\u7279\u5f81\u53ef\u89c6\u5316"
+    }
+  },
+  "debug_info": {
+    "last_featurizer_attn": "{'input_shapes': [torch.Size([1, 261, 1024])], 'output_shape': torch.Size([1, 261, 1024]), 'module_type': 'Attention'}"
+  }
+}
