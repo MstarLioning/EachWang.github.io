@@ -1,0 +1,60 @@
+{
+  "vision_backbone_type": "PrismaticVisionBackbone",
+  "projector_type": "PrismaticProjector",
+  "projector_layers": [
+    {
+      "name": "fc1",
+      "type": "Linear",
+      "shape": "torch.Size([8704, 2176])"
+    },
+    {
+      "name": "fc2",
+      "type": "Linear",
+      "shape": "torch.Size([4096, 8704])"
+    },
+    {
+      "name": "fc3",
+      "type": "Linear",
+      "shape": "torch.Size([4096, 4096])"
+    },
+    {
+      "name": "act_fn1",
+      "type": "GELU",
+      "shape": "unknown"
+    },
+    {
+      "name": "act_fn2",
+      "type": "GELU",
+      "shape": "unknown"
+    }
+  ],
+  "language_model_type": "LlamaForCausalLM",
+  "processor_type": "PrismaticProcessor",
+  "processor_attributes": [
+    "_auto_class: str",
+    "_create_repo(): method",
+    "_get_arguments_from_pretrained(): method",
+    "_get_files_timestamps(): method",
+    "_upload_modified_files(): method",
+    "attributes: list",
+    "batch_decode(): method",
+    "decode(): method",
+    "feature_extractor_class: NoneType",
+    "from_args_and_dict(): method",
+    "from_pretrained(): method",
+    "get_processor_dict(): method",
+    "image_processor(): PrismaticImageProcessor",
+    "image_processor_class: str",
+    "model_input_names: list",
+    "push_to_hub(): method",
+    "register_for_auto_class(): method",
+    "save_pretrained(): method",
+    "to_dict(): method",
+    "to_json_file(): method",
+    "to_json_string(): method",
+    "tokenizer(): LlamaTokenizerFast",
+    "tokenizer_class: str"
+  ],
+  "step_method_code": "    def step(\n        self, image: np.ndarray, task_description: Optional[str] = None, *args, **kwargs\n    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:\n        \"\"\"\n        Input:\n            image: np.ndarray of shape (H, W, 3), uint8\n            task_description: Optional[str], task description; if different from previous task description, policy state is reset\n        Output:\n            raw_action: dict; raw policy action output\n            action: dict; processed action to be sent to the maniskill2 environment, with the following keys:\n                - 'world_vector': np.ndarray of shape (3,), xyz translation of robot end-effector\n                - 'rot_axangle': np.ndarray of shape (3,), axis-angle representation of end-effector rotation\n                - 'gripper': np.ndarray of shape (1,), gripper action\n                - 'terminate_episode': np.ndarray of shape (1,), 1 if episode should be terminated, 0 otherwise\n        \"\"\"\n        if task_description is not None:\n            if task_description != self.task_description:\n                self.reset(task_description)\n\n        assert image.dtype == np.uint8\n        image = self._resize_image(image)\n\n        image: Image.Image = Image.fromarray(image)\n        prompt = task_description\n\n        # predict action (7-dof; un-normalize for bridgev2)\n        inputs = self.processor(prompt, image).to(\"cuda:0\", dtype=torch.bfloat16)\n        raw_actions = self.vla.predict_action(**inputs, unnorm_key=self.unnorm_key, do_sample=False)[None]\n        # print(f\"*** raw actions {raw_actions} ***\")\n\n        raw_action = {\n            \"world_vector\": np.array(raw_actions[0, :3]),\n            \"rotation_delta\": np.array(raw_actions[0, 3:6]),\n            \"open_gripper\": np.array(raw_actions[0, 6:7]),  # range [0, 1]; 1 = open; 0 = close\n        }\n\n        # process raw_action to obtain the action to be sent to the maniskill2 environment\n        action = {}\n        action[\"world_vector\"] = raw_action[\"world_vector\"] * self.action_scale\n        action_rotation_delta = np.asarray(raw_action[\"rotation_delta\"], dtype=np.float64)\n        roll, pitch, yaw = action_rotation_delta\n        action_rotation_ax, action_rotation_angle = euler2axangle(roll, pitch, yaw)\n        action_rotation_axangle = action_rotation_ax * action_rotation_angle\n        action[\"rot_axangle\"] = action_rotation_axangle * self.action_scale\n\n        if self.policy_setup == \"google_robot\":\n            current_gripper_action = raw_action[\"open_gripper\"]\n            if self.previous_gripper_action is None:\n                relative_gripper_action = np.array([0])\n            else:\n                relative_gripper_action = self.previous_gripper_action - current_gripper_action\n            self.previous_gripper_action = current_gripper_action\n\n            if np.abs(relative_gripper_action) > 0.5 and (not self.sticky_action_is_on):\n                self.sticky_action_is_on = True\n                self.sticky_gripper_action = relative_gripper_action\n\n            if self.sticky_action_is_on:\n                self.gripper_action_repeat += 1\n                relative_gripper_action = self.sticky_gripper_action\n\n            if self.gripper_action_repeat == self.sticky_gripper_num_repeat:\n                self.sticky_action_is_on = False\n                self.gripper_action_repeat = 0\n                self.sticky_gripper_action = 0.0\n\n            action[\"gripper\"] = relative_gripper_action\n\n        elif self.policy_setup == \"widowx_bridge\":\n            action[\"gripper\"] = 2.0 * (raw_action[\"open_gripper\"] > 0.5) - 1.0\n\n        action[\"terminate_episode\"] = np.array([0.0])\n\n        return raw_action, action\n",
+  "predict_action_code": "    def predict_action(\n        self, input_ids: Optional[torch.LongTensor] = None, unnorm_key: Optional[str] = None, **kwargs\n    ) -> np.ndarray:\n        \"\"\"Thin wrapper around .generate() that decodes predicted actions and unnormalizes them.\"\"\"\n        # We need to add this special empty token ('') after the colon (':') token in \"ASSISTANT:\"\n        # in order for the predictions to match the training configuration and be accurate.\n        input_ids = torch.cat(\n            (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1\n        )\n\n        # Run VLA inference\n        generated_ids = self.generate(input_ids, max_new_tokens=self.get_action_dim(unnorm_key), **kwargs)\n\n        # Extract predicted action tokens and translate into (normalized) continuous actions\n        predicted_action_token_ids = generated_ids[0, -self.get_action_dim(unnorm_key) :].cpu().numpy()\n        discretized_actions = self.vocab_size - predicted_action_token_ids\n        discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1)\n        normalized_actions = self.bin_centers[discretized_actions]\n\n        # Unnormalize actions\n        action_norm_stats = self.get_action_stats(unnorm_key)\n        mask = action_norm_stats.get(\"mask\", np.ones_like(action_norm_stats[\"q01\"], dtype=bool))\n        action_high, action_low = np.array(action_norm_stats[\"q99\"]), np.array(action_norm_stats[\"q01\"])\n        actions = np.where(\n            mask,\n            0.5 * (normalized_actions + 1) * (action_high - action_low) + action_low,\n            normalized_actions,\n        )\n\n        return actions\n"
+}

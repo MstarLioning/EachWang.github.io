@@ -1,0 +1,254 @@
+[2025-03-23 10:02:32] OpenVLA 注意力机制调试与分析
+[2025-03-23 10:02:32] === OpenVLA 注意力机制调试与分析 - 探索性分析 ===
+[2025-03-23 10:02:32] 加载OpenVLA模型...
+[2025-03-23 10:02:49] 模型加载成功!
+[2025-03-23 10:02:49] 分析Attention类实现...
+[2025-03-23 10:02:49] 找到Attention类: Attention
+[2025-03-23 10:02:49] 找到Attention类源代码:
+[2025-03-23 10:02:49] --------------------------------------------------
+[2025-03-23 10:02:49] class Attention(nn.Module):
+    fused_attn: Final[bool]
+
+    def __init__(
+            self,
+            dim,
+            num_heads=8,
+            qkv_bias=False,
+            qk_norm=False,
+            attn_drop=0.,
+            proj_drop=0.,
+            norm_layer=nn.LayerNorm,
+    ):
+        super().__init__()
+        assert dim % num_heads == 0, 'dim should be divisible by num_heads'
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.scale = self.head_dim ** -0.5
+        self.fused_attn = use_fused_attn()
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x):
+        B, N, C = x.shape
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
+
+        if self.fused_attn:
+            x = F.scaled_dot_product_attention(
+                q, k, v,
+                dropout_p=self.attn_drop.p if self.training else 0.,
+            )
+        else:
+            q = q * self.scale
+            attn = q @ k.transpose(-2, -1)
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = attn @ v
+
+        x = x.transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+[2025-03-23 10:02:49] --------------------------------------------------
+[2025-03-23 10:02:49] 源代码已保存到: ./openvla_analysis/debug_info/attention_class_source.txt
+[2025-03-23 10:02:49] 找到forward方法源代码:
+[2025-03-23 10:02:49] --------------------------------------------------
+[2025-03-23 10:02:49]     def forward(self, x):
+        B, N, C = x.shape
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.unbind(0)
+        q, k = self.q_norm(q), self.k_norm(k)
+
+        if self.fused_attn:
+            x = F.scaled_dot_product_attention(
+                q, k, v,
+                dropout_p=self.attn_drop.p if self.training else 0.,
+            )
+        else:
+            q = q * self.scale
+            attn = q @ k.transpose(-2, -1)
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = attn @ v
+
+        x = x.transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+[2025-03-23 10:02:49] --------------------------------------------------
+[2025-03-23 10:02:49] forward方法源代码已保存到: ./openvla_analysis/debug_info/attention_forward_source.txt
+[2025-03-23 10:02:49] Attention实例属性 (93):
+[2025-03-23 10:02:49]   T_destination: TypeVar
+[2025-03-23 10:02:49]   _apply: method, signature=(fn, recurse=True)
+[2025-03-23 10:02:49]   _backward_hooks: OrderedDict
+[2025-03-23 10:02:49]   _backward_pre_hooks: OrderedDict
+[2025-03-23 10:02:49]   _buffers: OrderedDict
+[2025-03-23 10:02:49]   _call_impl: method, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   _compiled_call_impl: NoneType
+[2025-03-23 10:02:49]   _forward_hooks: OrderedDict
+[2025-03-23 10:02:49]   _forward_hooks_always_called: OrderedDict
+[2025-03-23 10:02:49]   _forward_hooks_with_kwargs: OrderedDict
+[2025-03-23 10:02:49]   _forward_pre_hooks: OrderedDict
+[2025-03-23 10:02:49]   _forward_pre_hooks_with_kwargs: OrderedDict
+[2025-03-23 10:02:49]   _get_backward_hooks: method, signature=()
+[2025-03-23 10:02:49]   _get_backward_pre_hooks: method, signature=()
+[2025-03-23 10:02:49]   _get_name: method, signature=()
+[2025-03-23 10:02:49]   _is_full_backward_hook: NoneType
+[2025-03-23 10:02:49]   _is_hf_initialized: bool
+[2025-03-23 10:02:49]   _load_from_state_dict: method, signature=(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+[2025-03-23 10:02:49]   _load_state_dict_post_hooks: OrderedDict
+[2025-03-23 10:02:49]   _load_state_dict_pre_hooks: OrderedDict
+[2025-03-23 10:02:49]   _maybe_warn_non_full_backward_hook: method, signature=(inputs, result, grad_fn)
+[2025-03-23 10:02:49]   _modules: OrderedDict
+[2025-03-23 10:02:49]   _named_members: method, signature=(get_members_fn, prefix='', recurse=True, remove_duplicate: bool = True)
+[2025-03-23 10:02:49]   _non_persistent_buffers_set: set
+[2025-03-23 10:02:49]   _parameters: OrderedDict
+[2025-03-23 10:02:49]   _register_load_state_dict_pre_hook: method, signature=(hook, with_module=False)
+[2025-03-23 10:02:49]   _register_state_dict_hook: method, signature=(hook)
+[2025-03-23 10:02:49]   _replicate_for_data_parallel: method, signature=()
+[2025-03-23 10:02:49]   _save_to_state_dict: method, signature=(destination, prefix, keep_vars)
+[2025-03-23 10:02:49]   _slow_forward: method, signature=(*input, **kwargs)
+[2025-03-23 10:02:49]   _state_dict_hooks: OrderedDict
+[2025-03-23 10:02:49]   _state_dict_pre_hooks: OrderedDict
+[2025-03-23 10:02:49]   _version: int
+[2025-03-23 10:02:49]   _wrapped_call_impl: method, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   add_module: method, signature=(name: str, module: Optional[ForwardRef('Module')]) -> None
+[2025-03-23 10:02:49]   apply: method, signature=(fn: Callable[[ForwardRef('Module')], NoneType]) -> ~T
+[2025-03-23 10:02:49]   attn_drop: Dropout, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   bfloat16: method, signature=() -> ~T
+[2025-03-23 10:02:49]   buffers: method, signature=(recurse: bool = True) -> Iterator[torch.Tensor]
+[2025-03-23 10:02:49]   call_super_init: bool
+[2025-03-23 10:02:49]   children: method, signature=() -> Iterator[ForwardRef('Module')]
+[2025-03-23 10:02:49]   compile: method, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   cpu: method, signature=() -> ~T
+[2025-03-23 10:02:49]   cuda: method, signature=(device: Union[int, torch.device, NoneType] = None) -> ~T
+[2025-03-23 10:02:49]   double: method, signature=() -> ~T
+[2025-03-23 10:02:49]   dump_patches: bool
+[2025-03-23 10:02:49]   eval: method, signature=() -> ~T
+[2025-03-23 10:02:49]   extra_repr: method, signature=() -> str
+[2025-03-23 10:02:49]   float: method, signature=() -> ~T
+[2025-03-23 10:02:49]   forward: method, signature=(x)
+[2025-03-23 10:02:49]   fused_attn: bool
+[2025-03-23 10:02:49]   get_buffer: method, signature=(target: str) -> 'Tensor'
+[2025-03-23 10:02:49]   get_extra_state: method, signature=() -> Any
+[2025-03-23 10:02:49]   get_parameter: method, signature=(target: str) -> 'Parameter'
+[2025-03-23 10:02:49]   get_submodule: method, signature=(target: str) -> 'Module'
+[2025-03-23 10:02:49]   half: method, signature=() -> ~T
+[2025-03-23 10:02:49]   head_dim: int
+[2025-03-23 10:02:49]   ipu: method, signature=(device: Union[int, torch.device, NoneType] = None) -> ~T
+[2025-03-23 10:02:49]   k_norm: Identity, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   load_state_dict: method, signature=(state_dict: Mapping[str, Any], strict: bool = True, assign: bool = False)
+[2025-03-23 10:02:49]   modules: method, signature=() -> Iterator[ForwardRef('Module')]
+[2025-03-23 10:02:49]   named_buffers: method, signature=(prefix: str = '', recurse: bool = True, remove_duplicate: bool = True) -> Iterator[Tuple[str, torch.Tensor]]
+[2025-03-23 10:02:49]   named_children: method, signature=() -> Iterator[Tuple[str, ForwardRef('Module')]]
+[2025-03-23 10:02:49]   named_modules: method, signature=(memo: Optional[Set[ForwardRef('Module')]] = None, prefix: str = '', remove_duplicate: bool = True)
+[2025-03-23 10:02:49]   named_parameters: method, signature=(prefix: str = '', recurse: bool = True, remove_duplicate: bool = True) -> Iterator[Tuple[str, torch.nn.parameter.Parameter]]
+[2025-03-23 10:02:49]   num_heads: int
+[2025-03-23 10:02:49]   parameters: method, signature=(recurse: bool = True) -> Iterator[torch.nn.parameter.Parameter]
+[2025-03-23 10:02:49]   proj: Linear, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   proj_drop: Dropout, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   q_norm: Identity, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   qkv: Linear, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   register_backward_hook: method, signature=(hook: Callable[[ForwardRef('Module'), Union[Tuple[torch.Tensor, ...], torch.Tensor], Union[Tuple[torch.Tensor, ...], torch.Tensor]], Union[NoneType, Tuple[torch.Tensor, ...], torch.Tensor]]) -> torch.utils.hooks.RemovableHandle
+[2025-03-23 10:02:49]   register_buffer: method, signature=(name: str, tensor: Optional[torch.Tensor], persistent: bool = True) -> None
+[2025-03-23 10:02:49]   register_forward_hook: method, signature=(hook: Union[Callable[[~T, Tuple[Any, ...], Any], Optional[Any]], Callable[[~T, Tuple[Any, ...], Dict[str, Any], Any], Optional[Any]]], *, prepend: bool = False, with_kwargs: bool = False, always_call: bool = False) -> torch.utils.hooks.RemovableHandle
+[2025-03-23 10:02:49]   register_forward_pre_hook: method, signature=(hook: Union[Callable[[~T, Tuple[Any, ...]], Optional[Any]], Callable[[~T, Tuple[Any, ...], Dict[str, Any]], Optional[Tuple[Any, Dict[str, Any]]]]], *, prepend: bool = False, with_kwargs: bool = False) -> torch.utils.hooks.RemovableHandle
+[2025-03-23 10:02:49]   register_full_backward_hook: method, signature=(hook: Callable[[ForwardRef('Module'), Union[Tuple[torch.Tensor, ...], torch.Tensor], Union[Tuple[torch.Tensor, ...], torch.Tensor]], Union[NoneType, Tuple[torch.Tensor, ...], torch.Tensor]], prepend: bool = False) -> torch.utils.hooks.RemovableHandle
+[2025-03-23 10:02:49]   register_full_backward_pre_hook: method, signature=(hook: Callable[[ForwardRef('Module'), Union[Tuple[torch.Tensor, ...], torch.Tensor]], Union[NoneType, Tuple[torch.Tensor, ...], torch.Tensor]], prepend: bool = False) -> torch.utils.hooks.RemovableHandle
+[2025-03-23 10:02:49]   register_load_state_dict_post_hook: method, signature=(hook)
+[2025-03-23 10:02:49]   register_module: method, signature=(name: str, module: Optional[ForwardRef('Module')]) -> None
+[2025-03-23 10:02:49]   register_parameter: method, signature=(name: str, param: Optional[torch.nn.parameter.Parameter]) -> None
+[2025-03-23 10:02:49]   register_state_dict_pre_hook: method, signature=(hook)
+[2025-03-23 10:02:49]   requires_grad_: method, signature=(requires_grad: bool = True) -> ~T
+[2025-03-23 10:02:49]   scale: float
+[2025-03-23 10:02:49]   set_extra_state: method, signature=(state: Any)
+[2025-03-23 10:02:49]   share_memory: method, signature=() -> ~T
+[2025-03-23 10:02:49]   state_dict: method, signature=(*args, destination=None, prefix='', keep_vars=False)
+[2025-03-23 10:02:49]   to: method, signature=(*args, **kwargs)
+[2025-03-23 10:02:49]   to_empty: method, signature=(*, device: Union[int, str, torch.device, NoneType], recurse: bool = True) -> ~T
+[2025-03-23 10:02:49]   train: method, signature=(mode: bool = True) -> ~T
+[2025-03-23 10:02:49]   training: bool
+[2025-03-23 10:02:49]   type: method, signature=(dst_type: Union[torch.dtype, str]) -> ~T
+[2025-03-23 10:02:49]   xpu: method, signature=(device: Union[int, torch.device, NoneType] = None) -> ~T
+[2025-03-23 10:02:49]   zero_grad: method, signature=(set_to_none: bool = True) -> None
+[2025-03-23 10:02:49] 属性信息已保存到: ./openvla_analysis/debug_info/attention_attributes.json
+[2025-03-23 10:02:49] Attention类所在模块: timm.models.vision_transformer
+[2025-03-23 10:02:49] 模块文件路径: /home/ch/.conda/envs/simpler_env_openvla/lib/python3.10/site-packages/timm/models/vision_transformer.py
+[2025-03-23 10:02:49] 分析QKV计算过程...
+[2025-03-23 10:02:49] 找到QKV相关属性和方法: _backward_hooks, _backward_pre_hooks, _forward_hooks, _forward_hooks_always_called, _forward_hooks_with_kwargs, _forward_pre_hooks, _forward_pre_hooks_with_kwargs, _get_backward_hooks, _get_backward_pre_hooks, _is_full_backward_hook, _load_state_dict_post_hooks, _load_state_dict_pre_hooks, _maybe_warn_non_full_backward_hook, _register_load_state_dict_pre_hook, _register_state_dict_hook, _save_to_state_dict, _state_dict_hooks, _state_dict_pre_hooks, _version, eval, k_norm, q_norm, qkv, register_backward_hook, register_forward_hook, register_forward_pre_hook, register_full_backward_hook, register_full_backward_pre_hook, register_load_state_dict_post_hook, register_state_dict_pre_hook, requires_grad_
+[2025-03-23 10:02:49] 找到qkv方法: Linear(in_features=1024, out_features=3072, bias=True)
+[2025-03-23 10:02:49] 无法获取qkv方法源代码: type object 'Attention' has no attribute 'qkv'
+[2025-03-23 10:02:49] 方法 forward 已被钩子替换
+[2025-03-23 10:02:49] 分析注意力在模型中的流动...
+[2025-03-23 10:02:49] 找到projector，包含 5 个层
+[2025-03-23 10:02:49] 处理器属性: _auto_class: str, _create_repo(): method, _get_arguments_from_pretrained(): method, _get_files_timestamps(): method, _upload_modified_files(): method...
+[2025-03-23 10:02:49] step方法源码已保存到: ./openvla_analysis/debug_info/step_method_source.txt
+[2025-03-23 10:02:49] predict_action方法源码已保存到: ./openvla_analysis/debug_info/predict_action_source.txt
+[2025-03-23 10:02:49] 注意力流程信息已保存到: ./openvla_analysis/debug_info/attention_flow.json
+[2025-03-23 10:02:49] 使用任务 'pick up the red cube' 执行测试步骤...
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 261, 1024])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 方法 forward 被调用，输入形状: [torch.Size([1, 256, 1152])], 输出类型: Tensor
+[2025-03-23 10:02:53] 调试信息已保存到: ./openvla_analysis/debug_info/debug_info_20250323_100253.json
+[2025-03-23 10:02:53] 方法 forward 已恢复
+[2025-03-23 10:02:53] 所有钩子已移除
+[2025-03-23 10:02:53] 
+=== 分析总结 ===
+[2025-03-23 10:02:53] 分析总结已保存到: ./openvla_analysis/debug_info/analysis_summary.json
+[2025-03-23 10:02:53] 调试分析完成!
