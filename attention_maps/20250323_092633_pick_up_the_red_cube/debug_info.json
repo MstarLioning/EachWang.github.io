@@ -1,0 +1,177 @@
+{
+  "predict_action_inputs": {
+    "args_types": [],
+    "kwargs_keys": [
+      "input_ids",
+      "attention_mask",
+      "pixel_values",
+      "unnorm_key",
+      "do_sample"
+    ]
+  },
+  "vision_featurizer_attn_layer21": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        261,
+        1024
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        261,
+        1024
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "vision_featurizer_attn_layer22": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        261,
+        1024
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        261,
+        1024
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "vision_featurizer_attn_layer23": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        261,
+        1024
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        261,
+        1024
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "vision_fused_featurizer_attn_layer24": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        256,
+        1152
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        256,
+        1152
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "vision_fused_featurizer_attn_layer25": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        256,
+        1152
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        256,
+        1152
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "vision_fused_featurizer_attn_layer26": {
+    "input_types": [
+      "Tensor"
+    ],
+    "inputs_shapes": [
+      [
+        1,
+        256,
+        1152
+      ]
+    ],
+    "output_info": {
+      "type": "Tensor",
+      "shape": [
+        1,
+        256,
+        1152
+      ]
+    },
+    "module_type": "Attention"
+  },
+  "predict_action_output": {
+    "type": "ndarray",
+    "shape": "(7,)"
+  },
+  "prediction_results": {
+    "raw_action": {
+      "world_vector": [
+        0.003707941323518732,
+        0.0029258233300025194,
+        -0.04187823701138593
+      ],
+      "rotation_delta": [
+        0.14456674557632088,
+        0.015153677208750549,
+        -0.0046386218965057124
+      ],
+      "open_gripper": [
+        0.0
+      ]
+    },
+    "processed_action": {
+      "world_vector": [
+        0.003707941323518732,
+        0.0029258233300025194,
+        -0.04187823701138593
+      ],
+      "rot_axangle": [
+        0.14459886389153834,
+        0.014791966038154865,
+        -0.005725810989470686
+      ],
+      "gripper": [
+        0
+      ],
+      "terminate_episode": [
+        0.0
+      ]
+    }
+  }
+}
